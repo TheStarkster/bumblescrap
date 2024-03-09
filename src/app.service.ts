@@ -92,16 +92,17 @@ export class AppService {
 
       // Handling dynamic divs after the first two fixed divs
       // const allDivs = await profile.$$('div');
-     // const fixedDivs = allDivs.slice(0, 2);
+      // const fixedDivs = allDivs.slice(0, 2);
       // Process fixed divs if needed...
       // for (const fixedDiv of fixedDivs) {
       //   console.log('Processing fixed div');
       // }
       //const allDivs = await profile.$$('div')
       const dynamicDivsXPath = `${parentXPath}/div[position() >= 3]`;
-    const dynamicDivs = await page.$x(dynamicDivsXPath);
-      //const dynamicDivs = allDivs.slice(2); // Remaining divs are considered as dynamic
-      for (const div of dynamicDivs) {
+      const dynamicDivs = await page.$x(dynamicDivsXPath);
+
+      for (let i = 0; i < dynamicDivs.length; i++) {
+        const div = dynamicDivs[i];
         const images = await div.$$('img');
         const headers = await div.$$('h1, h2, h3');
         const paragraphs = await div.$$('p');
@@ -111,6 +112,7 @@ export class AppService {
           for (const image of images) {
             const imageUrl = await image.evaluate(img => (img as HTMLImageElement).src);
             console.log('Photo URL:', imageUrl);
+        
           }
         } else if (images.length === 1 && headers.length === 1 && paragraphs.length === 1) {
           console.log('Found 1 photo and text:');
@@ -118,21 +120,31 @@ export class AppService {
           const headerText = await headers[0].evaluate(h => h.textContent);
           const paragraphText = await paragraphs[0].evaluate(p => p.textContent);
           console.log(`Photo URL: ${imageUrl}, Header: ${headerText}, Paragraph: ${paragraphText}`);
+          
         } else if (headers.length === 1 && paragraphs.length === 1) {
           console.log('Found only text:');
           const headerText = await headers[0].evaluate(h => h.textContent);
           const paragraphText = await paragraphs[0].evaluate(p => p.textContent);
           console.log(`Header: ${headerText}, Paragraph: ${paragraphText}`);
+         
         } else if (images.length === 1) {
-          console.log('Found 1 photo or location:');
-          const imageUrlOrLocation = await images[0].evaluate(img => (img as HTMLImageElement).src);
-          console.log(`Photo URL : ${imageUrlOrLocation}`);
+          console.log('Found 1 photo:');
+          const imageUrl = await images[0].evaluate(img => (img as HTMLImageElement).src);
+          console.log(`Photo URL: ${imageUrl}`);
+
+          const locationGrandChildSelector = '.location-widget.location-widget--align-center';
+          const locationGrandChildren = await div.$$(`${locationGrandChildSelector}`);
+  
+          if (locationGrandChildren.length > 0) {
+              const locationText = await locationGrandChildren[0].evaluate(el => el.textContent.trim());
+              console.log(`Location: ${locationText}`);
+          } else {
+              console.log('Location information not found in the current or grandchild elements.');
+          }
         } else {
           console.log('Unexpected content format.');
         }
       }
-
-
     }
   }
 
@@ -164,6 +176,7 @@ export class AppService {
 
     //create a infinte loop to right swipe by hiting right arrow in the keyboard and for 10sec before each right swipe
     while (true) {
+      
       await this.processDynamicContent(page);
       await page.keyboard.press('ArrowRight'); // Simulates a right swipe
       await page.waitForTimeout(10000); // Waits for 10 seconds
