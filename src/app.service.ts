@@ -1,9 +1,44 @@
 import { Injectable } from '@nestjs/common';
-import { sign } from 'crypto';
 import * as puppeteer from 'puppeteer';
+import { InjectRepository } from '@nestjs/typeorm';
+import { TbUser } from './entity/user.entity';
+import { Repository } from 'typeorm';
+import { TbInterest } from './entity/interest.entity';
+import { TbPrompt } from './entity/prompt.entity';
+import { TbPromptAnswer } from './entity/prompt_answer.entity';
+import { TbUserImage } from './entity/user_image.entity';
+
 
 @Injectable()
 export class AppService {
+  constructor(
+    @InjectRepository(TbUser)
+    private userRepository: Repository<TbUser>,
+    @InjectRepository(TbInterest)
+    private interestRepository: Repository<TbInterest>,
+    @InjectRepository(TbPromptAnswer)
+    private promptAnswerRepository: Repository<TbPromptAnswer>,
+    @InjectRepository(TbPrompt)
+    private promptRepository: Repository<TbPrompt>,
+    @InjectRepository(TbUserImage)
+    private imageRepository: Repository<TbUserImage>
+
+  ) { }
+
+  async saveUserData(userName: string, userAge: string, verificationStatus: string, studyDetails: string, about: string) {
+    const _user = await this.userRepository.save({
+      name: userName,
+      age: userAge,
+      occupation: studyDetails,
+      is_verified: verificationStatus,
+      about: about
+    })
+    return _user.id;
+  }
+  //1 queryPromtt from database save into a variable 
+  //2 start scraping
+  //3 after each profile organise data 
+  //4 find each promt id from of the response we got from step 1 and create a new array of object containning promt id and answer 
 
   extractInterest(url: string) {
     switch (url) {
@@ -27,6 +62,15 @@ export class AppService {
   }
 
   async processDynamicContent(page: puppeteer.Page) {
+
+   // Fetch prompts from the tb_prompt table
+    const prompts = await this.promptRepository.find();
+    console.log(prompts);
+    
+
+    //this is array of string Where all images will be saved
+
+
     // Extracting profile details
     const parentXPath = '/html/body/div/div/div[1]/main/div[2]/div/div/span/div[1]/article/div[1]';
 
@@ -40,115 +84,139 @@ export class AppService {
 
       // For CSS selection inside the profile element
       const childProfile = await profile.$('div:first-of-type'); // Assuming you want the first div inside the profile
-      const allChildElements = await profile.$$('.child-class');
+      // const allChildElements = await profile.$$('.child-class');
 
-      if (allChildElements) {
+      //if (allChildElements) {
+      console.log("New Profile:");
 
-        const profileImageUrl = await childProfile.$eval('.encounters-story-profile-image img', img => (img as HTMLImageElement).src);
-        const userProfile = await childProfile.$('.encounters-story-profile__user');
-        const userNameAndAge = userProfile ? await userProfile.evaluate(el => el.textContent.trim()) : 'User name and age not found';
 
-        // Check for verification status
-        const verificationStatus = await childProfile.$('.encounters-story-profile__verification') ? 'Verified' : 'Not verified';
+      const userProfile = await childProfile.$('.encounters-story-profile__user');
+      // const userNameAndAge = userProfile ? await userProfile.evaluate(el => el.textContent.trim()) : 'User name and age not found';
+      const textContent = await userProfile.evaluate(el => el.textContent.trim());
+      const [userName, userAge] = textContent.split(',').map(part => part.trim());  // Splitting the text and trimming with whitespace
+      console.log(`User name: ${userName}, User age: ${userAge}`);
 
-        // Extract study details
-        const studyDetailsElement = await childProfile.$('.encounters-story-profile__details');
-        const studyDetails = studyDetailsElement ? await studyDetailsElement.evaluate(el => el.textContent.trim()) : 'Study details not found';
-        console.log(`Image URL: ${profileImageUrl}, Name and Age: ${userNameAndAge}, Verification Status: ${verificationStatus}, Study Details: ${studyDetails}`);
 
-        const paragraphXPath = `${parentXPath}//p`;
-        const unorderedListXPath = `${parentXPath}//ul`;
+      // Check for verification status
+      const verificationStatus = await childProfile.$('.encounters-story-profile__verification') ? 'Verified' : 'Not verified';
 
-        const paragraphs = await page.$x(paragraphXPath);
-        const unorderedLists = await page.$x(unorderedListXPath);
+      // Extract study details
+      const studyDetailsElement = await childProfile.$('.encounters-story-profile__details');
+      const studyDetails = studyDetailsElement ? await studyDetailsElement.evaluate(el => el.textContent.trim()) : 'Study details not found';
 
-        console.log('Extracted content:');
-        for (const p of paragraphs) {
-          const text = await p.evaluate(element => element.textContent);
-          console.log(`Paragraph: ${text}`);
-        }
+      console.log(`Verification Status: ${verificationStatus}, Study Details: ${studyDetails}`);
 
-        for (const ul of unorderedLists) {
-          const listItems = await ul.$x('.//li');  // Using relative XPath to find list items within each ul
-          let _interest = [];
+      //await this.saveUserData(userName, userAge, verificationStatus, studyDetails); // send datas in  fucntion 'saveUserData'
 
-          for (const listItem of listItems) {
-            const text = await listItem.evaluate(element => element.textContent);
-            const images = await listItem.$x('.//img');  // Using relative XPath for images within list item
+      const paragraphXPath = `${parentXPath}//p`;
+      const unorderedListXPath = `${parentXPath}//ul`;
 
-            if (images.length) {
-              for (const image of images) {
-                const imageUrl = await image.evaluate(img => (img as HTMLImageElement).src);
-                const interestName = this.extractInterest(imageUrl);
+      const paragraphs = await page.$x(paragraphXPath);
+      const unorderedLists = await page.$x(unorderedListXPath);
+
+      console.log('Extracted content:');
+      let aboutText = "";
+      for (const p of paragraphs) {
+        const text = await p.evaluate(element => element.textContent.trim());
+        console.log(`Paragraph: ${text}`);
+        aboutText = aboutText + text + " ";
+      }
+      const userId = await this.saveUserData(userName, userAge, verificationStatus, studyDetails, aboutText.trim());
+
+
+
+      for (const ul of unorderedLists) {
+        const listItems = await ul.$x('.//li');  // Using relative XPath to find list items within each ul
+        let _interest = [];
+
+        for (const listItem of listItems) {
+          const text = await listItem.evaluate(element => element.textContent);
+          const icons = await listItem.$x('.//img');  // Using relative XPath for images within list item
+
+          if (icons.length) {
+            for (const icon of icons) {
+              const iconUrl = await icon.evaluate(img => (img as HTMLImageElement).src);
+              const interestName = this.extractInterest(iconUrl);
+
+              if (interestName) {
+                console.log(`Interest: ${interestName}, Value: ${text}`);
                 _interest.push({ [interestName]: text });
+
+                await this.interestRepository.save({
+                  interest_type: interestName,
+                  interest_value: text,
+                  user: userId
+                });
               }
             }
           }
-          console.log(_interest);
         }
-      } else {
-        console.log('Parent or Profile section not found, moving forward.');
+        console.log(_interest);
       }
-
-      // Handling dynamic divs after the first two fixed divs
-      // const allDivs = await profile.$$('div');
-      // const fixedDivs = allDivs.slice(0, 2);
-      // Process fixed divs if needed...
-      // for (const fixedDiv of fixedDivs) {
-      //   console.log('Processing fixed div');
+      // } else {
+      //   console.log('Parent or Profile section not found, moving forward.');
       // }
-      //const allDivs = await profile.$$('div')
+
       const dynamicDivsXPath = `${parentXPath}/div[position() >= 3]`;
       const dynamicDivs = await page.$x(dynamicDivsXPath);
-
+      const allImageUrls: string[] = [];
+      const allPrompts = [];
       for (let i = 0; i < dynamicDivs.length; i++) {
-        const div = dynamicDivs[i];
+        const div = dynamicDivs[i]; // understanding the following code
         const images = await div.$$('img');
         const headers = await div.$$('h1, h2, h3');
         const paragraphs = await div.$$('p');
 
-        if (images.length === 2) {
-          console.log('Found 2 photos:');
-          for (const image of images) {
-            const imageUrl = await image.evaluate(img => (img as HTMLImageElement).src);
-            console.log('Photo URL:', imageUrl);
-        
-          }
-        } else if (images.length === 1 && headers.length === 1 && paragraphs.length === 1) {
-          console.log('Found 1 photo and text:');
-          const imageUrl = await images[0].evaluate(img => (img as HTMLImageElement).src);
-          const headerText = await headers[0].evaluate(h => h.textContent);
-          const paragraphText = await paragraphs[0].evaluate(p => p.textContent);
-          console.log(`Photo URL: ${imageUrl}, Header: ${headerText}, Paragraph: ${paragraphText}`);
-          
-        } else if (headers.length === 1 && paragraphs.length === 1) {
-          console.log('Found only text:');
-          const headerText = await headers[0].evaluate(h => h.textContent);
-          const paragraphText = await paragraphs[0].evaluate(p => p.textContent);
-          console.log(`Header: ${headerText}, Paragraph: ${paragraphText}`);
-         
-        } else if (images.length === 1) {
-          console.log('Found 1 photo:');
-          const imageUrl = await images[0].evaluate(img => (img as HTMLImageElement).src);
-          console.log(`Photo URL: ${imageUrl}`);
 
-          const locationGrandChildSelector = '.location-widget.location-widget--align-center';
-          const locationGrandChildren = await div.$$(`${locationGrandChildSelector}`);
-  
-          if (locationGrandChildren.length > 0) {
-              const locationText = await locationGrandChildren[0].evaluate(el => el.textContent.trim());
-              console.log(`Location: ${locationText}`);
-          } else {
-              console.log('Location information not found in the current or grandchild elements.');
-          }
+
+        for (const image of images) {
+          const imageUrl = await image.evaluate(img => (img as HTMLImageElement).src);
+          allImageUrls.push(imageUrl);
+          console.log('Photo URL:', imageUrl);
+        }
+
+        if (headers.length === 1 && paragraphs.length === 1) {
+          console.log('Found 1 photo and text:');
+          //const imageUrl = await images[0].evaluate(img => (img as HTMLImageElement).src);
+          const headerText = await headers[0].evaluate(h => h.textContent);
+          const paragraphText = await paragraphs[0].evaluate(p => p.textContent);
+          console.log(headerText);
+          console.log(headerText.trim().toLowerCase());
+          const promptId = prompts.find(e => e.prompt.trim().toLowerCase() == headerText.trim().toLowerCase()).id;// learm find and map
+          allPrompts.push({ user: userId, prompt: promptId, answer: paragraphText })
+        }
+        else if (headers.length === 2 && paragraphs.length === 2) {
+          console.log("found 2 text:");
+          const headerText1 = await headers[0].evaluate(h => h.textContent);
+          const paragraphText1 = await paragraphs[0].evaluate(p => p.textContent);
+
+          const headerText2 = await headers[1].evaluate(h => h.textContent);
+          const paragraphText2 = await paragraphs[1].evaluate(p => p.textContent);
+          console.log(`Header1: ${headerText1}, Paragraph1: ${paragraphText1}`);
+          console.log(`Header2: ${headerText2}, Paragraph2: ${paragraphText2}`);
+
+          const promptId_1 = prompts.find(e => e.prompt.trim().toLowerCase() == headerText1.trim().toLowerCase()).id;
+          allPrompts.push({ user: userId, prompt: promptId_1, answer: paragraphText1 })
+
+          const promptId_2 = prompts.find(e => e.prompt.trim().toLowerCase()== headerText2.trim().toLowerCase()).id;
+          allPrompts.push({ user: userId, prompt: promptId_2, answer: paragraphText2 })
+
         } else {
           console.log('Unexpected content format.');
         }
       }
+      //profile photo
+      const profileImageUrl = await childProfile.$eval('.encounters-story-profile-image img', img => (img as HTMLImageElement).src);
+      await this.imageRepository.save([profileImageUrl, ...allImageUrls].map(img => ({ user: userId, url: img })))
+      console.log('All extracted image URLs:', allImageUrls);
+
+      await this.promptAnswerRepository.save(allPrompts);
     }
   }
 
   async openBumble(): Promise<string> {
+    const prompts = await this.promptRepository.find();
+    console.log(prompts);
     const browser = await puppeteer.launch({ headless: false }); // `headless: false` shows the browser UI
     const page = await browser.newPage();
     await page.goto('https://bumble.com/get-started', { waitUntil: 'domcontentloaded' });
@@ -176,7 +244,7 @@ export class AppService {
 
     //create a infinte loop to right swipe by hiting right arrow in the keyboard and for 10sec before each right swipe
     while (true) {
-      
+
       await this.processDynamicContent(page);
       await page.keyboard.press('ArrowRight'); // Simulates a right swipe
       await page.waitForTimeout(10000); // Waits for 10 seconds
