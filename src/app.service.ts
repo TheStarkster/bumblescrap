@@ -63,13 +63,9 @@ export class AppService {
 
   async processDynamicContent(page: puppeteer.Page) {
 
-   // Fetch prompts from the tb_prompt table
+    // Fetch prompts from the tb_prompt table
     const prompts = await this.promptRepository.find();
     console.log(prompts);
-    
-
-    //this is array of string Where all images will be saved
-
 
     // Extracting profile details
     const parentXPath = '/html/body/div/div/div[1]/main/div[2]/div/div/span/div[1]/article/div[1]';
@@ -89,13 +85,11 @@ export class AppService {
       //if (allChildElements) {
       console.log("New Profile:");
 
-
       const userProfile = await childProfile.$('.encounters-story-profile__user');
       // const userNameAndAge = userProfile ? await userProfile.evaluate(el => el.textContent.trim()) : 'User name and age not found';
       const textContent = await userProfile.evaluate(el => el.textContent.trim());
       const [userName, userAge] = textContent.split(',').map(part => part.trim());  // Splitting the text and trimming with whitespace
       console.log(`User name: ${userName}, User age: ${userAge}`);
-
 
       // Check for verification status
       const verificationStatus = await childProfile.$('.encounters-story-profile__verification') ? 'Verified' : 'Not verified';
@@ -105,8 +99,6 @@ export class AppService {
       const studyDetails = studyDetailsElement ? await studyDetailsElement.evaluate(el => el.textContent.trim()) : 'Study details not found';
 
       console.log(`Verification Status: ${verificationStatus}, Study Details: ${studyDetails}`);
-
-      //await this.saveUserData(userName, userAge, verificationStatus, studyDetails); // send datas in  fucntion 'saveUserData'
 
       const paragraphXPath = `${parentXPath}//p`;
       const unorderedListXPath = `${parentXPath}//ul`;
@@ -159,7 +151,9 @@ export class AppService {
 
       const dynamicDivsXPath = `${parentXPath}/div[position() >= 3]`;
       const dynamicDivs = await page.$x(dynamicDivsXPath);
+      //this is array of string Where all images will be saved
       const allImageUrls: string[] = [];
+
       const allPrompts = [];
       for (let i = 0; i < dynamicDivs.length; i++) {
         const div = dynamicDivs[i]; // understanding the following code
@@ -182,7 +176,7 @@ export class AppService {
           const paragraphText = await paragraphs[0].evaluate(p => p.textContent);
           console.log(headerText);
           console.log(headerText.trim().toLowerCase());
-          const promptId = prompts.find(e => e.prompt.trim().toLowerCase() == headerText.trim().toLowerCase()).id;// learm find and map
+          const promptId = prompts.find(e => e.prompt.replace(/\s+/g, ' ').trim().toLowerCase() == headerText.replace(/\s+/g, ' ').trim().toLowerCase())?.id;// learm find and map
           allPrompts.push({ user: userId, prompt: promptId, answer: paragraphText })
         }
         else if (headers.length === 2 && paragraphs.length === 2) {
@@ -195,10 +189,10 @@ export class AppService {
           console.log(`Header1: ${headerText1}, Paragraph1: ${paragraphText1}`);
           console.log(`Header2: ${headerText2}, Paragraph2: ${paragraphText2}`);
 
-          const promptId_1 = prompts.find(e => e.prompt.trim().toLowerCase() == headerText1.trim().toLowerCase()).id;
+          const promptId_1 = prompts.find(e => e.prompt.replace(/\s+/g, ' ').trim().toLowerCase() == headerText1.replace(/\s+/g, ' ').trim().toLowerCase())?.id;
           allPrompts.push({ user: userId, prompt: promptId_1, answer: paragraphText1 })
 
-          const promptId_2 = prompts.find(e => e.prompt.trim().toLowerCase()== headerText2.trim().toLowerCase()).id;
+          const promptId_2 = prompts.find(e => e.prompt.replace(/\s+/g, ' ').trim().toLowerCase() == headerText2.replace(/\s+/g, ' ').trim().toLowerCase())?.id;
           allPrompts.push({ user: userId, prompt: promptId_2, answer: paragraphText2 })
 
         } else {
@@ -217,7 +211,7 @@ export class AppService {
   async openBumble(): Promise<string> {
     const prompts = await this.promptRepository.find();
     console.log(prompts);
-    const browser = await puppeteer.launch({ headless: false }); // `headless: false` shows the browser UI
+    const browser = await puppeteer.launch({ headless: false });
     const page = await browser.newPage();
     await page.goto('https://bumble.com/get-started', { waitUntil: 'domcontentloaded' });
 
