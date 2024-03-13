@@ -24,6 +24,7 @@
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/typeorm": "^10.0.2",
+    "dotenv": "^16.4.5",
     "pg": "^8.11.3",
     "puppeteer": "10.0.0",
     "puppeteer-core": "^22.4.0",

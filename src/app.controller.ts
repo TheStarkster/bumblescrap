@@ -9,4 +9,9 @@ export class AppController {
   openBumble() {
     return this.appService.openBumble();
   }
+
+  @Get('extract-users')
+  getExtractUsers() {
+    return this.appService.extractUsers();
+  }
 }
