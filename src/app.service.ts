@@ -256,4 +256,13 @@ export class AppService {
     await browser.close(); // Close the browser after operation is complete
     return 'Bumble opened in browser and interaction completed.';
   }
+
+
+  async extractUsers() {
+    try {
+      return await this.userRepository.find();
+    } catch (error) {
+      throw error;
+    }
+  }
 }
