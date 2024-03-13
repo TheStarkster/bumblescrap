@@ -7,6 +7,8 @@ import { TbInterest } from './entity/interest.entity';
 import { TbPrompt } from './entity/prompt.entity';
 import { TbPromptAnswer } from './entity/prompt_answer.entity';
 import { TbUserImage } from './entity/user_image.entity';
+import { writeHeapSnapshot } from 'v8';
+import { writeFileSync, writeSync } from 'fs';
 
 
 @Injectable()
@@ -61,7 +63,7 @@ export class AppService {
     }
   }
 
-  async processDynamicContent(page: puppeteer.Page) {
+  async processDynamicContent(page: puppeteer.Page): Promise<boolean> {
 
     // Fetch prompts from the tb_prompt table
     const prompts = await this.promptRepository.find();
@@ -80,6 +82,9 @@ export class AppService {
         console.error("Error waiting for element:", err);
         console.log("Refreshing the page...");
         await page.reload({ waitUntil: ["domcontentloaded", "networkidle0"] });
+        await page.waitForXPath(parentXPath, { timeout: 2 * 60 * 1000 })
+        .then(() => console.log("Parent Element found after refresh"))
+        .catch(err => console.error("Still having trouble finding the element:", err));
     });
 
     const profiles = await page.$x('/html/body/div/div/div[1]/main/div[2]/div/div/span/div[1]/article/div[1]');
@@ -185,7 +190,13 @@ export class AppService {
           console.log(headerText, paragraphText);
           console.log(headerText.trim().toLowerCase());
           const promptId = prompts.find(e => e.prompt.replace(/\s+/g, ' ').trim().toLowerCase() == headerText.replace(/\s+/g, ' ').trim().toLowerCase())?.id;// learm find and map
+          if (promptId == null) {
+            writeFileSync("unavalaible_Path.txt",`${headerText}\n`,{flag:"a"})
+        }else{
           allPrompts.push({ user: userId, prompt: promptId, answer: paragraphText })
+        }
+         
+         
         }
         else if (headers.length === 2 && paragraphs.length === 2) {
           console.log("found 2 text:");
@@ -198,12 +209,22 @@ export class AppService {
           console.log(`Header2: ${headerText2}, Paragraph2: ${paragraphText2}`);
 
           const promptId_1 = prompts.find(e => e.prompt.replace(/\s+/g, ' ').trim().toLowerCase() == headerText1.replace(/\s+/g, ' ').trim().toLowerCase())?.id;
+          if (promptId_1 == null) {
+            writeFileSync("unavalaible_Path.txt",`${headerText1}\n`,{flag:"a"})
+        }else{
           allPrompts.push({ user: userId, prompt: promptId_1, answer: paragraphText1 })
-
+        }
           const promptId_2 = prompts.find(e => e.prompt.replace(/\s+/g, ' ').trim().toLowerCase() == headerText2.replace(/\s+/g, ' ').trim().toLowerCase())?.id;
+          if (promptId_2 == null) {
+            writeFileSync("unavalaible_Path.txt",`${headerText2}\n`,{flag:"a"})
+           
+        }else{
           allPrompts.push({ user: userId, prompt: promptId_2, answer: paragraphText2 })
+        }
+          
 
         } else {
+
           console.log('Unexpected content format.');
         }
       }
@@ -213,7 +234,9 @@ export class AppService {
       console.log('All extracted image URLs:', allImageUrls);
 
       await this.promptAnswerRepository.save(allPrompts);
+
     }
+    return true; 
   }
 
   async openBumble(): Promise<string> {
@@ -247,7 +270,12 @@ export class AppService {
     //create a infinte loop to right swipe by hiting right arrow in the keyboard and for 10sec before each right swipe
     while (true) {
 
-      await this.processDynamicContent(page);
+      const shouldContinue = await this.processDynamicContent(page);
+      if (!shouldContinue) {
+          console.log('Stopping the scraping process due to missing prompt ID.');
+          break;  // Exit the loop if scraping should be stopped
+      }
+     // await this.processDynamicContent(page);
       await page.keyboard.press('ArrowRight'); // Simulates a right swipe
       await page.waitForTimeout(6000); // Waits for 10 seconds
     }
@@ -260,7 +288,15 @@ export class AppService {
 
   async extractUsers() {
     try {
-      return await this.userRepository.find();
+      return await this.promptAnswerRepository.createQueryBuilder("prompt_answer")
+        .leftJoinAndSelect("prompt_answer.user", "user")
+        .leftJoinAndSelect("prompt_answer.prompt", "prompt")
+        .select([
+          "prompt_answer.id",
+          "prompt_answer.answer",
+          "prompt.id",
+          "user.id"
+        ]).getMany()
     } catch (error) {
       throw error;
     }
