@@ -65,14 +65,22 @@ export class AppService {
 
     // Fetch prompts from the tb_prompt table
     const prompts = await this.promptRepository.find();
-    console.log(prompts);
+    // console.log(prompts);
 
     // Extracting profile details
     const parentXPath = '/html/body/div/div/div[1]/main/div[2]/div/div/span/div[1]/article/div[1]';
 
     await page.waitForXPath(parentXPath, { timeout: 2 * 60 * 1000 })
-      .then(() => console.log("Parent Element found"))
-      .catch(err => console.error("Error waiting for element:", err));
+      // .then(() => console.log("Parent Element found"))
+      // .catch(err => console.error("Error waiting for element:", err));
+      .then(() => {
+        console.log("Parent Element found");
+    })
+    .catch(async err => {
+        console.error("Error waiting for element:", err);
+        console.log("Refreshing the page...");
+        await page.reload({ waitUntil: ["domcontentloaded", "networkidle0"] });
+    });
 
     const profiles = await page.$x('/html/body/div/div/div[1]/main/div[2]/div/div/span/div[1]/article/div[1]');
     if (profiles.length > 0) {
@@ -174,7 +182,7 @@ export class AppService {
           //const imageUrl = await images[0].evaluate(img => (img as HTMLImageElement).src);
           const headerText = await headers[0].evaluate(h => h.textContent);
           const paragraphText = await paragraphs[0].evaluate(p => p.textContent);
-          console.log(headerText);
+          console.log(headerText, paragraphText);
           console.log(headerText.trim().toLowerCase());
           const promptId = prompts.find(e => e.prompt.replace(/\s+/g, ' ').trim().toLowerCase() == headerText.replace(/\s+/g, ' ').trim().toLowerCase())?.id;// learm find and map
           allPrompts.push({ user: userId, prompt: promptId, answer: paragraphText })
@@ -209,8 +217,8 @@ export class AppService {
   }
 
   async openBumble(): Promise<string> {
-    const prompts = await this.promptRepository.find();
-    console.log(prompts);
+    // const prompts = await this.promptRepository.find();
+    // console.log(prompts);
     const browser = await puppeteer.launch({ headless: false });
     const page = await browser.newPage();
     await page.goto('https://bumble.com/get-started', { waitUntil: 'domcontentloaded' });
@@ -241,7 +249,7 @@ export class AppService {
 
       await this.processDynamicContent(page);
       await page.keyboard.press('ArrowRight'); // Simulates a right swipe
-      await page.waitForTimeout(10000); // Waits for 10 seconds
+      await page.waitForTimeout(6000); // Waits for 10 seconds
     }
 
 
