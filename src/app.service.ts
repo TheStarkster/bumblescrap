@@ -7,7 +7,6 @@ import { TbInterest } from './entity/interest.entity';
 import { TbPrompt } from './entity/prompt.entity';
 import { TbPromptAnswer } from './entity/prompt_answer.entity';
 import { TbUserImage } from './entity/user_image.entity';
-import { writeHeapSnapshot } from 'v8';
 import { writeFileSync, writeSync } from 'fs';
 
 
@@ -37,10 +36,7 @@ export class AppService {
     })
     return _user.id;
   }
-  //1 queryPromtt from database save into a variable 
-  //2 start scraping
-  //3 after each profile organise data 
-  //4 find each promt id from of the response we got from step 1 and create a new array of object containning promt id and answer 
+
 
   extractInterest(url: string) {
     switch (url) {
@@ -63,28 +59,39 @@ export class AppService {
     }
   }
 
+
   async processDynamicContent(page: puppeteer.Page): Promise<boolean> {
 
     // Fetch prompts from the tb_prompt table
     const prompts = await this.promptRepository.find();
     // console.log(prompts);
 
-    // Extracting profile details
+    // Extracting profile details 
     const parentXPath = '/html/body/div/div/div[1]/main/div[2]/div/div/span/div[1]/article/div[1]';
 
     await page.waitForXPath(parentXPath, { timeout: 2 * 60 * 1000 })
-      // .then(() => console.log("Parent Element found"))
-      // .catch(err => console.error("Error waiting for element:", err));
-      .then(() => {
+     
+    .then(() => {
         console.log("Parent Element found");
     })
-    .catch(async err => {
+    .catch(async (err) => {
         console.error("Error waiting for element:", err);
-        console.log("Refreshing the page...");
-        await page.reload({ waitUntil: ["domcontentloaded", "networkidle0"] });
-        await page.waitForXPath(parentXPath, { timeout: 2 * 60 * 1000 })
-        .then(() => console.log("Parent Element found after refresh"))
-        .catch(err => console.error("Still having trouble finding the element:", err));
+
+        while (true) {
+            console.log("Refreshing the page...");
+            try {
+                // Trigger page reload
+                await page.reload({ waitUntil: "domcontentloaded", timeout: 2 * 60 * 1000 }).catch(e => console.error("Error reloading page:", e));
+
+                // Wait for the specific element you're interested in
+                const parentPath = '/html/body/div/div/div[1]/main/div[2]/div/div/span/div[1]/article/div[1]';
+                await page.waitForXPath(parentPath, { timeout: 2 * 60 * 1000 });
+                console.log("Parent Element found after refresh");
+                break;
+            } catch (error) {
+                console.error("Still having trouble finding the element, refreshing again:", error);
+            }
+        }
     });
 
     const profiles = await page.$x('/html/body/div/div/div[1]/main/div[2]/div/div/span/div[1]/article/div[1]');
@@ -191,12 +198,12 @@ export class AppService {
           console.log(headerText.trim().toLowerCase());
           const promptId = prompts.find(e => e.prompt.replace(/\s+/g, ' ').trim().toLowerCase() == headerText.replace(/\s+/g, ' ').trim().toLowerCase())?.id;// learm find and map
           if (promptId == null) {
-            writeFileSync("unavalaible_Path.txt",`${headerText}\n`,{flag:"a"})
-        }else{
-          allPrompts.push({ user: userId, prompt: promptId, answer: paragraphText })
-        }
-         
-         
+            writeFileSync("unavalaible_Path.txt", `${headerText}\n`, { flag: "a" })
+          } else {
+            allPrompts.push({ user: userId, prompt: promptId, answer: paragraphText })
+          }
+
+
         }
         else if (headers.length === 2 && paragraphs.length === 2) {
           console.log("found 2 text:");
@@ -210,18 +217,18 @@ export class AppService {
 
           const promptId_1 = prompts.find(e => e.prompt.replace(/\s+/g, ' ').trim().toLowerCase() == headerText1.replace(/\s+/g, ' ').trim().toLowerCase())?.id;
           if (promptId_1 == null) {
-            writeFileSync("unavalaible_Path.txt",`${headerText1}\n`,{flag:"a"})
-        }else{
-          allPrompts.push({ user: userId, prompt: promptId_1, answer: paragraphText1 })
-        }
+            writeFileSync("unavalaible_Path.txt", `${headerText1}\n`, { flag: "a" })
+          } else {
+            allPrompts.push({ user: userId, prompt: promptId_1, answer: paragraphText1 })
+          }
           const promptId_2 = prompts.find(e => e.prompt.replace(/\s+/g, ' ').trim().toLowerCase() == headerText2.replace(/\s+/g, ' ').trim().toLowerCase())?.id;
           if (promptId_2 == null) {
-            writeFileSync("unavalaible_Path.txt",`${headerText2}\n`,{flag:"a"})
-           
-        }else{
-          allPrompts.push({ user: userId, prompt: promptId_2, answer: paragraphText2 })
-        }
-          
+            writeFileSync("unavalaible_Path.txt", `${headerText2}\n`, { flag: "a" })
+
+          } else {
+            allPrompts.push({ user: userId, prompt: promptId_2, answer: paragraphText2 })
+          }
+
 
         } else {
 
@@ -236,7 +243,7 @@ export class AppService {
       await this.promptAnswerRepository.save(allPrompts);
 
     }
-    return true; 
+    return true;
   }
 
   async openBumble(): Promise<string> {
@@ -272,10 +279,10 @@ export class AppService {
 
       const shouldContinue = await this.processDynamicContent(page);
       if (!shouldContinue) {
-          console.log('Stopping the scraping process due to missing prompt ID.');
-          break;  // Exit the loop if scraping should be stopped
+        console.log('Stopping the scraping process due to missing prompt ID.');
+        break;  // Exit the loop if scraping should be stopped
       }
-     // await this.processDynamicContent(page);
+      // await this.processDynamicContent(page);
       await page.keyboard.press('ArrowRight'); // Simulates a right swipe
       await page.waitForTimeout(6000); // Waits for 10 seconds
     }
@@ -296,7 +303,7 @@ export class AppService {
           "prompt_answer.answer",
           "prompt.id",
           "user.id"
-        ]).getMany()
+        ]).getMany()
     } catch (error) {
       throw error;
     }
