@@ -1,14 +1,14 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
-
 import { TbUser } from './entity/user.entity';
 import { TbInterest } from './entity/interest.entity';
 import { TbPrompt } from './entity/prompt.entity';
 import { TbPromptAnswer } from './entity/prompt_answer.entity';
 import { TbUserImage } from './entity/user_image.entity';
 import { config } from "dotenv";
+import { AppService } from './app.service';
+
 
 config()
  //console.log(process.env.DB_USER, process.env.DB_PASS, process.env.DB_NAME);

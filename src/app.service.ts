@@ -9,9 +9,13 @@ import { TbPromptAnswer } from './entity/prompt_answer.entity';
 import { TbUserImage } from './entity/user_image.entity';
 import { writeFileSync, writeSync } from 'fs';
 
+//import { Pool } from 'pg';
+import axios from 'axios';
+import imageSize from 'image-size';
 
 @Injectable()
 export class AppService {
+  //private pool: Pool;
   constructor(
     @InjectRepository(TbUser)
     private userRepository: Repository<TbUser>,
@@ -23,9 +27,7 @@ export class AppService {
     private promptRepository: Repository<TbPrompt>,
     @InjectRepository(TbUserImage)
     private imageRepository: Repository<TbUserImage>
-
   ) { }
-
   async saveUserData(userName: string, userAge: string, verificationStatus: string, studyDetails: string, about: string) {
     const _user = await this.userRepository.save({
       name: userName,
@@ -36,7 +38,6 @@ export class AppService {
     })
     return _user.id;
   }
-
 
   extractInterest(url: string) {
     switch (url) {
@@ -59,65 +60,56 @@ export class AppService {
     }
   }
 
-
   async processDynamicContent(page: puppeteer.Page): Promise<boolean> {
 
-    // Fetch prompts from the tb_prompt table
     const prompts = await this.promptRepository.find();
-    // console.log(prompts);
 
     // Extracting profile details 
     const parentXPath = '/html/body/div/div/div[1]/main/div[2]/div/div/span/div[1]/article/div[1]';
-
     await page.waitForXPath(parentXPath, { timeout: 2 * 60 * 1000 })
-     
-    .then(() => {
+      .then(() => {
         console.log("Parent Element found");
-    })
-    .catch(async (err) => {
+      })
+      .catch(async (err) => {
         console.error("Error waiting for element:", err);
 
         while (true) {
-            console.log("Refreshing the page...");
-            try {
-                // Trigger page reload
-                await page.reload({ waitUntil: "domcontentloaded", timeout: 2 * 60 * 1000 }).catch(e => console.error("Error reloading page:", e));
+          console.log("Refreshing the page...");
+          try {
+            // Trigger page reload
+            await page.reload({ waitUntil: "domcontentloaded", timeout: 2 * 60 * 1000 }).catch(e => console.error("Error reloading page:", e));
 
-                // Wait for the specific element you're interested in
-                const parentPath = '/html/body/div/div/div[1]/main/div[2]/div/div/span/div[1]/article/div[1]';
-                await page.waitForXPath(parentPath, { timeout: 2 * 60 * 1000 });
-                console.log("Parent Element found after refresh");
-                break;
-            } catch (error) {
-                console.error("Still having trouble finding the element, refreshing again:", error);
-            }
+            // Wait for the specific element you're interested in
+            const parentPath = '/html/body/div/div/div[1]/main/div[2]/div/div/span/div[1]/article/div[1]';
+            await page.waitForXPath(parentPath, { timeout: 2 * 60 * 1000 });
+            console.log("Parent Element found after refresh");
+            break;
+          } catch (error) {
+            console.error("Still having trouble finding the element, refreshing again:", error);
+          }
         }
-    });
+      });
 
     const profiles = await page.$x('/html/body/div/div/div[1]/main/div[2]/div/div/span/div[1]/article/div[1]');
     if (profiles.length > 0) {
       const profile = profiles[0]; // Get the first element from the XPath result
 
       // For CSS selection inside the profile element
-      const childProfile = await profile.$('div:first-of-type'); // Assuming you want the first div inside the profile
-      // const allChildElements = await profile.$$('.child-class');
-
-      //if (allChildElements) {
+      const childProfile = await profile.$('div:first-of-type');
       console.log("New Profile:");
 
       const userProfile = await childProfile.$('.encounters-story-profile__user');
-      // const userNameAndAge = userProfile ? await userProfile.evaluate(el => el.textContent.trim()) : 'User name and age not found';
       const textContent = await userProfile.evaluate(el => el.textContent.trim());
-      const [userName, userAge] = textContent.split(',').map(part => part.trim());  // Splitting the text and trimming with whitespace
+
+      // Splitting the text and trimming with whitespace
+      const [userName, userAge] = textContent.split(',').map(part => part.trim());
       console.log(`User name: ${userName}, User age: ${userAge}`);
 
       // Check for verification status
       const verificationStatus = await childProfile.$('.encounters-story-profile__verification') ? 'Verified' : 'Not verified';
-
       // Extract study details
       const studyDetailsElement = await childProfile.$('.encounters-story-profile__details');
       const studyDetails = studyDetailsElement ? await studyDetailsElement.evaluate(el => el.textContent.trim()) : 'Study details not found';
-
       console.log(`Verification Status: ${verificationStatus}, Study Details: ${studyDetails}`);
 
       const paragraphXPath = `${parentXPath}//p`;
@@ -125,7 +117,6 @@ export class AppService {
 
       const paragraphs = await page.$x(paragraphXPath);
       const unorderedLists = await page.$x(unorderedListXPath);
-
       console.log('Extracted content:');
       let aboutText = "";
       for (const p of paragraphs) {
@@ -134,8 +125,6 @@ export class AppService {
         aboutText = aboutText + text + " ";
       }
       const userId = await this.saveUserData(userName, userAge, verificationStatus, studyDetails, aboutText.trim());
-
-
 
       for (const ul of unorderedLists) {
         const listItems = await ul.$x('.//li');  // Using relative XPath to find list items within each ul
@@ -165,18 +154,16 @@ export class AppService {
         }
         console.log(_interest);
       }
-      // } else {
-      //   console.log('Parent or Profile section not found, moving forward.');
-      // }
+
 
       const dynamicDivsXPath = `${parentXPath}/div[position() >= 3]`;
       const dynamicDivs = await page.$x(dynamicDivsXPath);
       //this is array of string Where all images will be saved
       const allImageUrls: string[] = [];
-
       const allPrompts = [];
+
       for (let i = 0; i < dynamicDivs.length; i++) {
-        const div = dynamicDivs[i]; // understanding the following code
+        const div = dynamicDivs[i];
         const images = await div.$$('img');
         const headers = await div.$$('h1, h2, h3');
         const paragraphs = await div.$$('p');
@@ -292,7 +279,6 @@ export class AppService {
     return 'Bumble opened in browser and interaction completed.';
   }
 
-
   async extractUsers() {
     try {
       return await this.promptAnswerRepository.createQueryBuilder("prompt_answer")
@@ -307,5 +293,41 @@ export class AppService {
     } catch (error) {
       throw error;
     }
+  }
+
+  async logSmallImageUrls(): Promise<void> {
+    const images = await this.imageRepository.find({
+      select: ['url'],
+      take: 50
+    });
+
+    const urls = images.map(image => image.url);
+    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36';
+
+    for (const url of urls) {
+      try {
+        const response = await axios.get(url, {
+          responseType: 'arraybuffer',
+          headers: {
+            'User-Agent': userAgent,
+            'Referer': 'https://www.example.com/' // Adjust based on actual referrer if necessary
+          }
+        });
+        const size = imageSize(response.data);
+        if (size.width <= 140 || size.height <= 140) {
+          console.log('Small image URL:', url);
+        }
+
+      } catch (error) {
+        console.error('Error processing image:', url, error.message);
+        if (error.response && error.response.status === 403) {
+          console.error('Access forbidden. You might be rate limited or need authentication.');
+        }
+      }
+    }
+  }
+
+  async fixImages(): Promise<void> {
+    await this.logSmallImageUrls();
   }
 }

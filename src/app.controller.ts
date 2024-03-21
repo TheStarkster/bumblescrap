@@ -13,5 +13,15 @@ export class AppController {
   @Get('extract-users')
   getExtractUsers() {
     return this.appService.extractUsers();
+  } 
+
+  @Get('/fix-images')
+  fixImages(){
+    return this.appService.fixImages();
   }
 }
+
+
+
+
+
